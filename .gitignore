@@ -1,0 +1,41 @@
+# Binaries and build outputs
+physio-api
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go module caches
+*.test
+coverage.out
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+env.local
+
+# Oracle wallet and credentials
+Wallet_*/
+*.zip
+*.jks
+*.sso
+tnsnames.ora
+sqlnet.ora
+ojdbc.properties
+
+# Data files
+*.xlsx
+*.csv
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db

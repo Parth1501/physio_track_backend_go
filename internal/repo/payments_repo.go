@@ -1,0 +1,175 @@
+package repo
+
+import (
+	"context"
+	"database/sql"
+	"strconv"
+	"time"
+
+	"github.com/google/uuid"
+
+	"phsio_track_backend/internal/core"
+)
+
+type PaymentRepo struct {
+	db *sql.DB
+}
+
+func NewPaymentRepo(db *sql.DB) *PaymentRepo {
+	return &PaymentRepo{db: db}
+}
+
+func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment) error {
+	if p.ID == "" {
+		p.ID = uuid.NewString()
+	}
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO payments (id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time, owner_username)
+		VALUES (:1,:2,:3,:4,:5,:6,SYSTIMESTAMP,:7)
+	`, p.ID, p.PatientID, p.UniquePaymentID, p.Amount, p.Mode, p.Date, owner)
+	if err != nil {
+		return err
+	}
+	p.CreatedTime = now
+	return nil
+}
+
+// Upsert inserts or updates a payment keyed by unique_payment_id.
+func (r *PaymentRepo) Upsert(ctx context.Context, owner string, p *core.Payment) error {
+	if p.ID == "" {
+		p.ID = uuid.NewString()
+	}
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx, `
+		MERGE INTO payments t
+		USING (SELECT :1 AS unique_payment_id,
+		              :2 AS id,
+		              :3 AS patient_id,
+		              :4 AS amount,
+		              :5 AS payment_mode,
+		              :6 AS paid_date,
+		              :7 AS owner_username
+		       FROM dual) s
+		ON (t.unique_payment_id = s.unique_payment_id AND t.owner_username = s.owner_username)
+		WHEN MATCHED THEN
+		  UPDATE SET t.amount = s.amount,
+		             t.payment_mode = s.payment_mode,
+		             t.paid_date = s.paid_date
+		WHEN NOT MATCHED THEN
+		  INSERT (id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time, owner_username)
+		  VALUES (s.id, s.patient_id, s.unique_payment_id, s.amount, s.payment_mode, s.paid_date, SYSTIMESTAMP, s.owner_username)
+	`, p.UniquePaymentID, p.ID, p.PatientID, p.Amount, p.Mode, p.Date, owner)
+	if err != nil {
+		return err
+	}
+	p.CreatedTime = now
+	return nil
+}
+
+func (r *PaymentRepo) List(ctx context.Context, owner, patientID string) ([]core.Payment, error) {
+	var rows *sql.Rows
+	var err error
+	if patientID != "" && patientID != "ALL" {
+		rows, err = r.db.QueryContext(ctx, `
+			SELECT id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time
+			FROM payments
+			WHERE patient_id=:1 AND owner_username=:2
+			ORDER BY paid_date DESC
+		`, patientID, owner)
+	} else {
+		rows, err = r.db.QueryContext(ctx, `
+			SELECT id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time
+			FROM payments
+			WHERE owner_username=:1
+			ORDER BY paid_date DESC
+		`, owner)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []core.Payment
+	for rows.Next() {
+		var p core.Payment
+		if err := rows.Scan(&p.ID, &p.PatientID, &p.UniquePaymentID, &p.Amount, &p.Mode, &p.Date, &p.CreatedTime); err != nil {
+			return nil, err
+		}
+		items = append(items, p)
+	}
+	return items, rows.Err()
+}
+
+func (r *PaymentRepo) Update(ctx context.Context, owner, id string, upd *core.PaymentUpdate) (core.Payment, error) {
+	// Build update set
+	type field struct {
+		name string
+		val  interface{}
+	}
+	fields := []field{}
+	if upd.Amount != nil {
+		fields = append(fields, field{name: "amount", val: *upd.Amount})
+	}
+	if upd.Mode != nil {
+		fields = append(fields, field{name: "payment_mode", val: *upd.Mode})
+	}
+	if upd.Date != nil {
+		fields = append(fields, field{name: "paid_date", val: *upd.Date})
+	}
+	if len(fields) == 0 {
+		return r.GetByID(ctx, owner, id)
+	}
+
+	args := []interface{}{}
+	setClauses := ""
+	for i, f := range fields {
+		if i > 0 {
+			setClauses += ", "
+		}
+		setClauses += f.name + "=:" + strconv.Itoa(i+1)
+		args = append(args, f.val)
+	}
+	args = append(args, id, owner)
+
+	q := "UPDATE payments SET " + setClauses + " WHERE id=:" + strconv.Itoa(len(args)-1) + " AND owner_username=:" + strconv.Itoa(len(args))
+	res, err := r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return core.Payment{}, err
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return core.Payment{}, ErrNotFound
+	}
+	return r.GetByID(ctx, owner, id)
+}
+
+func (r *PaymentRepo) Delete(ctx context.Context, owner, id string) error {
+	cmd, err := r.db.ExecContext(ctx, `DELETE FROM payments WHERE id=:1 AND owner_username=:2`, id, owner)
+	if err != nil {
+		return err
+	}
+	rows, err := cmd.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PaymentRepo) GetByID(ctx context.Context, owner, id string) (core.Payment, error) {
+	var p core.Payment
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time
+		FROM payments
+		WHERE id=:1 AND owner_username=:2
+	`, id, owner).Scan(&p.ID, &p.PatientID, &p.UniquePaymentID, &p.Amount, &p.Mode, &p.Date, &p.CreatedTime)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return p, ErrNotFound
+		}
+		return p, err
+	}
+	return p, nil
+}
