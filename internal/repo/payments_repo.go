@@ -42,6 +42,9 @@ func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment)
 	if err != nil {
 		return err
 	}
+	if err := r.setLastPaid(ctx, owner, p.PatientID, p.Amount); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -77,6 +80,9 @@ func (r *PaymentRepo) Upsert(ctx context.Context, owner string, p *core.Payment)
 		  VALUES (s.id, s.patient_id, s.amount, s.payment_mode, s.paid_date, s.owner_username)
 	`, p.ID, p.PatientID, p.Amount, p.Mode, p.Date, owner)
 	if err != nil {
+		return err
+	}
+	if err := r.setLastPaid(ctx, owner, p.PatientID, p.Amount); err != nil {
 		return err
 	}
 	return nil
@@ -172,7 +178,14 @@ func (r *PaymentRepo) Update(ctx context.Context, owner, id string, upd *core.Pa
 	if rows, _ := res.RowsAffected(); rows == 0 {
 		return core.Payment{}, ErrNotFound
 	}
-	return r.GetByID(ctx, owner, id)
+	updatedPayment, err := r.GetByID(ctx, owner, id)
+	if err != nil {
+		return core.Payment{}, err
+	}
+	if err := r.setLastPaid(ctx, owner, updatedPayment.PatientID, updatedPayment.Amount); err != nil {
+		return core.Payment{}, err
+	}
+	return updatedPayment, nil
 }
 
 func (r *PaymentRepo) Delete(ctx context.Context, owner, id string) error {
@@ -243,4 +256,14 @@ func ensureIST(t time.Time) time.Time {
 	}
 	ist := time.FixedZone("IST", 5*3600+1800)
 	return t.In(ist)
+}
+
+// setLastPaid updates the patient's last_paid_amount.
+func (r *PaymentRepo) setLastPaid(ctx context.Context, owner, patientID string, amount float64) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE patients
+		   SET last_paid_amount = :1
+		 WHERE id = :2 AND owner_username = :3
+	`, amount, patientID, owner)
+	return err
 }
