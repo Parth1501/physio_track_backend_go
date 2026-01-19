@@ -17,6 +17,7 @@ type Config struct {
 	DBPassword      string
 	DBConnectString string
 	TNSAdmin        string
+	LogFile         string
 	JWTSecret       string
 	JWTIssuer       string
 	JWTExpiry       time.Duration
@@ -33,6 +34,7 @@ func Load() Config {
 		DBPassword:      getEnv("DB_PASSWORD", ""),
 		DBConnectString: getEnv("DB_CONNECT_STRING", ""),
 		TNSAdmin:        getEnv("TNS_ADMIN", ""),
+		LogFile:         getEnv("LOG_FILE", ""),
 		JWTSecret:       getEnv("JWT_SECRET", "dev-secret"),
 		JWTIssuer:       getEnv("JWT_ISSUER", "phsio-track"),
 		JWTExpiry:       getEnvDuration("JWT_EXPIRY_MIN", 60) * time.Minute,

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,22 @@ import (
 func main() {
 	// Load configuration (env vars + .env if present)
 	cfg := config.Load()
+
+	// Logging: write to stdout; optionally also to a log file if LOG_FILE is set
+	var logWriters []io.Writer
+	logWriters = append(logWriters, os.Stdout)
+	if cfg.LogFile != "" {
+		f, err := os.OpenFile(cfg.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatalf("failed to open log file %s: %v", cfg.LogFile, err)
+		}
+		defer f.Close()
+		logWriters = append(logWriters, f)
+	}
+	mw := io.MultiWriter(logWriters...)
+	log.SetOutput(mw)
+	gin.DefaultWriter = mw
+	gin.DefaultErrorWriter = mw
 
 	// Set Gin mode
 	if cfg.Env == "production" {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,6 +27,8 @@ type DBConfig struct {
 func NewDB(ctx context.Context, cfg DBConfig) (*sql.DB, error) {
 	cleanDir := strings.ReplaceAll(cfg.TNSAdmin, `\`, `/`)
 
+	log.Printf("DB config user=%s connect_string=%s tns_admin=%s", cfg.User, cfg.ConnectString, cleanDir)
+
 	tns, err := resolveTNS(cfg.ConnectString, cfg.TNSAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("parse tns: %w", err)
@@ -38,7 +41,7 @@ func NewDB(ctx context.Context, cfg DBConfig) (*sql.DB, error) {
 	}
 	dsn := goora.BuildUrl(tns.host, tns.port, tns.service, cfg.User, cfg.Password, opts)
 
-	fmt.Printf("DB connect host=%s port=%d service=%s\n", tns.host, tns.port, tns.service)
+	log.Printf("DB connect host=%s port=%d service=%s", tns.host, tns.port, tns.service)
 
 	db, err := sql.Open("oracle", dsn)
 	if err != nil {
@@ -52,6 +55,7 @@ func NewDB(ctx context.Context, cfg DBConfig) (*sql.DB, error) {
 	if err := db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("db ping failed: %w", err)
 	}
+	log.Println("DB ping ok")
 	return db, nil
 }
 
