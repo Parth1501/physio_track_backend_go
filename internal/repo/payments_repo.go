@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -16,11 +17,16 @@ type PaymentRepo struct {
 	db *sql.DB
 }
 
+var ErrForbidden = errors.New("forbidden")
+
 func NewPaymentRepo(db *sql.DB) *PaymentRepo {
 	return &PaymentRepo{db: db}
 }
 
 func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment) error {
+	if err := r.assertPatientOwner(ctx, owner, p.PatientID); err != nil {
+		return err
+	}
 	p.Mode = strings.ToUpper(strings.TrimSpace(p.Mode))
 	// Normalize date: if provided without zone, assume local and convert to UTC for storage consistency
 	if !p.Date.Time.IsZero() {
@@ -41,6 +47,9 @@ func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment)
 
 // Upsert inserts or updates a payment keyed by id.
 func (r *PaymentRepo) Upsert(ctx context.Context, owner string, p *core.Payment) error {
+	if err := r.assertPatientOwner(ctx, owner, p.PatientID); err != nil {
+		return err
+	}
 	p.Mode = strings.ToUpper(strings.TrimSpace(p.Mode))
 	if !p.Date.Time.IsZero() {
 		p.Date = core.NewJSONTime(ensureUTC(p.Date.Time))
@@ -112,6 +121,18 @@ func (r *PaymentRepo) List(ctx context.Context, owner, patientID string) ([]core
 }
 
 func (r *PaymentRepo) Update(ctx context.Context, owner, id string, upd *core.PaymentUpdate) (core.Payment, error) {
+	// Ensure payment belongs to a patient owned by requester
+	current, err := r.GetByID(ctx, owner, id)
+	if err != nil {
+		if err == ErrNotFound {
+			return core.Payment{}, ErrForbidden
+		}
+		return core.Payment{}, err
+	}
+	if err := r.assertPatientOwner(ctx, owner, current.PatientID); err != nil {
+		return core.Payment{}, err
+	}
+
 	// Build update set
 	type field struct {
 		name string
@@ -155,6 +176,15 @@ func (r *PaymentRepo) Update(ctx context.Context, owner, id string, upd *core.Pa
 }
 
 func (r *PaymentRepo) Delete(ctx context.Context, owner, id string) error {
+	// Ensure the payment belongs to a patient owned by requester
+	p, err := r.GetByID(ctx, owner, id)
+	if err != nil {
+		return err
+	}
+	if err := r.assertPatientOwner(ctx, owner, p.PatientID); err != nil {
+		return err
+	}
+
 	cmd, err := r.db.ExecContext(ctx, `DELETE FROM payments WHERE id=:1 AND owner_username=:2`, id, owner)
 	if err != nil {
 		return err
@@ -187,6 +217,23 @@ func (r *PaymentRepo) GetByID(ctx context.Context, owner, id string) (core.Payme
 		p.Date = core.NewJSONTime(paid.Time)
 	}
 	return p, nil
+}
+
+// assertPatientOwner ensures the patient belongs to the requesting owner.
+func (r *PaymentRepo) assertPatientOwner(ctx context.Context, owner, patientID string) error {
+	var exists int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT 1
+		FROM patients
+		WHERE id=:1 AND owner_username=:2
+	`, patientID, owner).Scan(&exists)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrForbidden
+		}
+		return err
+	}
+	return nil
 }
 
 // ensureUTC normalizes times to UTC if they have no location.
