@@ -23,8 +23,6 @@ type Patient struct {
 	Examination       string      `json:"examination"`
 	Rehab             string      `json:"rehab"`
 	Diagnosis         string      `json:"diagnosis"`
-	ExerciseTableJSON [][]*string `json:"exercise_table_json,omitempty"`
-	ExerciseTableRaw  string      `json:"exercise_table_raw,omitempty"`
 	CreatedTime       time.Time   `json:"created_time,omitempty"`
 	UpdatedTime       time.Time   `json:"updated_time,omitempty"`
 	LastPaidAmount    float64     `json:"last_paid_amount"`
@@ -45,8 +43,6 @@ type PatientUpdate struct {
 	Examination       *string      `json:"examination,omitempty"`
 	Rehab             *string      `json:"rehab,omitempty"`
 	Diagnosis         *string      `json:"diagnosis,omitempty"`
-	ExerciseTableJSON *[][]*string `json:"exercise_table_json,omitempty"`
-	ExerciseTableRaw  *string      `json:"exercise_table_raw,omitempty"`
 	LastPaidAmount    *float64     `json:"last_paid_amount,omitempty"`
 	Status            *string      `json:"status,omitempty"`
 }
@@ -54,11 +50,9 @@ type PatientUpdate struct {
 type Payment struct {
 	ID              string    `json:"id"`
 	PatientID       string    `json:"patient_id"`
-	UniquePaymentID string    `json:"unique_payment_id"`
 	Amount          float64   `json:"amount"`
 	Mode            string    `json:"mode"`
 	Date            time.Time `json:"date"`
-	CreatedTime     time.Time `json:"created_time,omitempty"`
 	OwnerUsername   string    `json:"-"`
 }
 

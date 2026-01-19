@@ -38,6 +38,46 @@ type loginResponse struct {
 	Token string `json:"token"`
 }
 
+type createUserRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+func (h *AuthHandler) registerUser(c *gin.Context) {
+	var req createUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	if _, err := h.userRepo.GetByUsername(c, req.Username); err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
+		return
+	} else if err != nil && err != repo.ErrNotFound {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup failed"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "hash failed"})
+		return
+	}
+
+	user := core.User{
+		Username:     req.Username,
+		PasswordHash: string(hash),
+	}
+	if err := h.userRepo.UpsertUser(c, user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "create failed"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"username": req.Username,
+	})
+}
+
 // Login validates credentials and issues a JWT.
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
@@ -72,6 +112,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, loginResponse{Token: signed})
+}
+
+// CreateUser creates a new user (protected endpoint).
+func (h *AuthHandler) CreateUser(c *gin.Context) {
+	h.registerUser(c)
+}
+
+// RegisterUser exposes a public signup endpoint (no JWT required).
+func (h *AuthHandler) RegisterUser(c *gin.Context) {
+	h.registerUser(c)
 }
 
 // SeedUser is a helper to create the first user if needed.

@@ -146,11 +146,6 @@ func importDetails(ctx context.Context, repo *repo.PatientRepo, owner string, pa
 			LastPaidAmount: atof(get(row, 15)),
 			Status:         get(row, 16),
 		}
-		if p.Rehab != "" {
-			p.ExerciseTableRaw = p.Rehab
-			p.ExerciseTableJSON = parseExerciseTable(p.Rehab)
-		}
-
 		if err := repo.Create(ctx, owner, &p); err != nil {
 			fmt.Printf("error row %d: %v\n", i+2, err)
 		}
@@ -179,11 +174,11 @@ func importPayments(ctx context.Context, paymentRepo *repo.PaymentRepo, owner st
 			continue
 		}
 		p := core.Payment{
-			PatientID:       uuidForString(get(row, 0)),
-			UniquePaymentID: get(row, 1),
-			Amount:          atof(get(row, 2)),
-			Mode:            get(row, 3),
-			Date:            parseDate(get(row, 4)),
+			ID:        uuidForString(get(row, 1)),
+			PatientID: uuidForString(get(row, 0)),
+			Amount:    atof(get(row, 2)),
+			Mode:      get(row, 3),
+			Date:      parseDate(get(row, 4)),
 		}
 		if p.PatientID == "" {
 			fmt.Printf("skipping payment row %d: empty patient_id\n", i+2)
@@ -191,10 +186,10 @@ func importPayments(ctx context.Context, paymentRepo *repo.PaymentRepo, owner st
 		}
 		if err := paymentRepo.Upsert(ctx, owner, &p); err != nil {
 			if strings.Contains(err.Error(), "ORA-02291") {
-				fmt.Printf("skipping payment row %d: patient not found (patient_id=%s, unique_payment_id=%s)\n", i+2, p.PatientID, p.UniquePaymentID)
+				fmt.Printf("skipping payment row %d: patient not found (patient_id=%s)\n", i+2, p.PatientID)
 				continue
 			}
-			fmt.Printf("payment row %d error (patient_id=%s, unique_payment_id=%s): %v\n", i+2, p.PatientID, p.UniquePaymentID, err)
+			fmt.Printf("payment row %d error (patient_id=%s): %v\n", i+2, p.PatientID, err)
 		}
 	}
 	return nil
@@ -312,32 +307,4 @@ func parseSheetDate(s string) time.Time {
 		return t
 	}
 	return time.Time{}
-}
-
-func parseExerciseTable(raw string) [][]*string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	rowParts := strings.Split(raw, "Ɍ")
-	var table [][]*string
-	for _, r := range rowParts {
-		r = strings.TrimSpace(r)
-		if r == "" {
-			continue
-		}
-		colParts := strings.Split(r, "Č")
-		row := make([]*string, 0, len(colParts))
-		for _, c := range colParts {
-			cell := strings.TrimSpace(c)
-			if cell == "" {
-				row = append(row, nil)
-			} else {
-				val := cell
-				row = append(row, &val)
-			}
-		}
-		table = append(table, row)
-	}
-	return table
 }

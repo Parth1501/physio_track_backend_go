@@ -3,7 +3,6 @@ package repo
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -22,76 +21,65 @@ func NewPatientRepo(db *sql.DB) *PatientRepo {
 }
 
 func (r *PatientRepo) Create(ctx context.Context, owner string, p *core.Patient) error {
-	var exerciseJSON []byte
-	var err error
-	if p.ExerciseTableJSON != nil {
-		exerciseJSON, err = json.Marshal(p.ExerciseTableJSON)
-		if err != nil {
-			return err
-		}
-	}
-
 	if p.ID == "" {
 		p.ID = uuid.NewString()
 	}
 
-	_, err = r.db.ExecContext(ctx, `
+	created := p.CreatedTime
+	if created.IsZero() {
+		created = time.Now()
+	}
+	updated := p.UpdatedTime
+	if updated.IsZero() {
+		updated = created
+	}
+	p.Status = "ACTIVE"
+
+	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO patients (
 			id, full_name, phone_number, age, gender, chief_complaint, present_history,
-			medical_history, observation, palpation, examination, rehab, diagnosis,
-			exercise_table_json, exercise_table_raw, created_time, updated_time, last_paid_amount, status, owner_username
+			medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
 		) VALUES (
-			:1,:2,:3,:4,:5,:6,:7,:8,:9,:10,:11,:12,:13,:14,:15,
-			COALESCE(:16, SYSTIMESTAMP),
-			COALESCE(:17, SYSTIMESTAMP),
-			:18,:19,:20
+			:1,:2,:3,:4,:5,:6,:7,:8,:9,:10,:11,:12,:13,:14,
+			:15,:16,:17,:18,:19
 		)
 	`,
 		p.ID, p.FullName, p.PhoneNumber, p.Age, p.Gender, p.ChiefComplaint, p.PresentHistory,
-		p.MedicalHistory, p.Observation, p.Palpation, p.Examination, p.Rehab, p.Diagnosis,
-		nullableJSON(exerciseJSON), nullableText(p.ExerciseTableRaw),
-		nullableTime(p.CreatedTime), nullableTime(p.UpdatedTime),
+		p.MedicalHistory, p.Observation, p.Palpation, p.Examination, p.Rehab, p.Diagnosis, created, updated,
 		p.LastPaidAmount, p.Status, owner,
 	)
 	if err != nil {
 		return err
 	}
-	if p.CreatedTime.IsZero() {
-		p.CreatedTime = time.Now()
-	}
-	if p.UpdatedTime.IsZero() {
-		p.UpdatedTime = p.CreatedTime
-	}
+	p.CreatedTime = created
+	p.UpdatedTime = updated
 	return nil
 }
 
 func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, error) {
+	var items []core.Patient
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, full_name, phone_number, age, gender, chief_complaint, present_history,
-		       medical_history, observation, palpation, examination, rehab, diagnosis,
-		       exercise_table_json, exercise_table_raw, created_time, updated_time, last_paid_amount, status
+		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status
 		FROM patients
 		WHERE owner_username=:1
 		ORDER BY created_time DESC
 	`, owner)
 	if err != nil {
-		return nil, err
+		return items, err
 	}
 	defer rows.Close()
 
-	var items []core.Patient
 	for rows.Next() {
 		var p core.Patient
-		var exerciseJSON []byte
-		var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, exerciseRaw, status sql.NullString
+		var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status sql.NullString
 		var age sql.NullInt64
 		var lastPaid sql.NullFloat64
 		if err := rows.Scan(
 			&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
-			&medical, &observation, &palpation, &examination, &rehab, &diagnosis,
-			&exerciseJSON, &exerciseRaw, &p.CreatedTime, &p.UpdatedTime, &lastPaid, &status,
+			&medical, &observation, &palpation, &examination, &rehab, &diagnosis, &p.CreatedTime, &p.UpdatedTime, &lastPaid, &status,
 		); err != nil {
-			return nil, err
+			return make([]core.Patient, 0), err
 		}
 		p.PhoneNumber = nullStringToString(phone)
 		p.Age = nullIntToInt(age)
@@ -104,12 +92,8 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		p.Examination = nullStringToString(examination)
 		p.Rehab = nullStringToString(rehab)
 		p.Diagnosis = nullStringToString(diagnosis)
-		p.ExerciseTableRaw = nullStringToString(exerciseRaw)
 		p.LastPaidAmount = nullFloatToFloat(lastPaid)
 		p.Status = nullStringToString(status)
-		if len(exerciseJSON) > 0 {
-			_ = json.Unmarshal(exerciseJSON, &p.ExerciseTableJSON)
-		}
 		items = append(items, p)
 	}
 	return items, rows.Err()
@@ -117,20 +101,18 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 
 func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patient, error) {
 	var p core.Patient
-	var exerciseJSON []byte
-	var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, exerciseRaw, status sql.NullString
+	var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status sql.NullString
 	var age sql.NullInt64
 	var lastPaid sql.NullFloat64
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, full_name, phone_number, age, gender, chief_complaint, present_history,
-		       medical_history, observation, palpation, examination, rehab, diagnosis,
-		       exercise_table_json, exercise_table_raw, created_time, updated_time, last_paid_amount, status
+		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status
 		FROM patients
 		WHERE id=:1 AND owner_username=:2
 	`, id, owner).Scan(
 		&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
 		&medical, &observation, &palpation, &examination, &rehab, &diagnosis,
-		&exerciseJSON, &exerciseRaw, &p.CreatedTime, &p.UpdatedTime, &lastPaid, &status,
+		&p.CreatedTime, &p.UpdatedTime, &lastPaid, &status,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -149,12 +131,8 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	p.Examination = nullStringToString(examination)
 	p.Rehab = nullStringToString(rehab)
 	p.Diagnosis = nullStringToString(diagnosis)
-	p.ExerciseTableRaw = nullStringToString(exerciseRaw)
 	p.LastPaidAmount = nullFloatToFloat(lastPaid)
 	p.Status = nullStringToString(status)
-	if len(exerciseJSON) > 0 {
-		_ = json.Unmarshal(exerciseJSON, &p.ExerciseTableJSON)
-	}
 	return p, nil
 }
 
@@ -204,16 +182,6 @@ func (r *PatientRepo) Update(ctx context.Context, owner, id string, upd *core.Pa
 	}
 	if upd.Diagnosis != nil {
 		add(true, "diagnosis=:%d", *upd.Diagnosis)
-	}
-	if upd.ExerciseTableJSON != nil {
-		b, err := json.Marshal(upd.ExerciseTableJSON)
-		if err != nil {
-			return core.Patient{}, err
-		}
-		add(true, "exercise_table_json=:%d", nullableJSON(b))
-	}
-	if upd.ExerciseTableRaw != nil {
-		add(true, "exercise_table_raw=:%d", nullableText(*upd.ExerciseTableRaw))
 	}
 	if upd.LastPaidAmount != nil {
 		add(true, "last_paid_amount=:%d", *upd.LastPaidAmount)
@@ -283,11 +251,4 @@ func nullFloatToFloat(nf sql.NullFloat64) float64 {
 		return nf.Float64
 	}
 	return 0
-}
-
-func nullableTime(t time.Time) interface{} {
-	if t.IsZero() {
-		return nil
-	}
-	return t
 }

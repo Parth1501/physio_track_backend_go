@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -23,47 +22,43 @@ func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment)
 	if p.ID == "" {
 		p.ID = uuid.NewString()
 	}
-	now := time.Now()
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO payments (id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time, owner_username)
-		VALUES (:1,:2,:3,:4,:5,:6,SYSTIMESTAMP,:7)
-	`, p.ID, p.PatientID, p.UniquePaymentID, p.Amount, p.Mode, p.Date, owner)
+		INSERT INTO payments (id, patient_id, amount, payment_mode, paid_date, owner_username)
+		VALUES (:1,:2,:3,:4,:5,:6)
+	`, p.ID, p.PatientID, p.Amount, p.Mode, p.Date, owner)
 	if err != nil {
 		return err
 	}
-	p.CreatedTime = now
 	return nil
 }
 
-// Upsert inserts or updates a payment keyed by unique_payment_id.
+// Upsert inserts or updates a payment keyed by id.
 func (r *PaymentRepo) Upsert(ctx context.Context, owner string, p *core.Payment) error {
 	if p.ID == "" {
 		p.ID = uuid.NewString()
 	}
-	now := time.Now()
 	_, err := r.db.ExecContext(ctx, `
 		MERGE INTO payments t
-		USING (SELECT :1 AS unique_payment_id,
-		              :2 AS id,
-		              :3 AS patient_id,
-		              :4 AS amount,
-		              :5 AS payment_mode,
-		              :6 AS paid_date,
-		              :7 AS owner_username
+		USING (SELECT :1 AS id,
+		              :2 AS patient_id,
+		              :3 AS amount,
+		              :4 AS payment_mode,
+		              :5 AS paid_date,
+		              :6 AS owner_username
 		       FROM dual) s
-		ON (t.unique_payment_id = s.unique_payment_id AND t.owner_username = s.owner_username)
+		ON (t.id = s.id AND t.owner_username = s.owner_username)
 		WHEN MATCHED THEN
 		  UPDATE SET t.amount = s.amount,
 		             t.payment_mode = s.payment_mode,
-		             t.paid_date = s.paid_date
+		             t.paid_date = s.paid_date,
+		             t.patient_id = s.patient_id
 		WHEN NOT MATCHED THEN
-		  INSERT (id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time, owner_username)
-		  VALUES (s.id, s.patient_id, s.unique_payment_id, s.amount, s.payment_mode, s.paid_date, SYSTIMESTAMP, s.owner_username)
-	`, p.UniquePaymentID, p.ID, p.PatientID, p.Amount, p.Mode, p.Date, owner)
+		  INSERT (id, patient_id, amount, payment_mode, paid_date, owner_username)
+		  VALUES (s.id, s.patient_id, s.amount, s.payment_mode, s.paid_date, s.owner_username)
+	`, p.ID, p.PatientID, p.Amount, p.Mode, p.Date, owner)
 	if err != nil {
 		return err
 	}
-	p.CreatedTime = now
 	return nil
 }
 
@@ -72,14 +67,14 @@ func (r *PaymentRepo) List(ctx context.Context, owner, patientID string) ([]core
 	var err error
 	if patientID != "" && patientID != "ALL" {
 		rows, err = r.db.QueryContext(ctx, `
-			SELECT id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time
+			SELECT id, patient_id, amount, payment_mode, paid_date
 			FROM payments
 			WHERE patient_id=:1 AND owner_username=:2
 			ORDER BY paid_date DESC
 		`, patientID, owner)
 	} else {
 		rows, err = r.db.QueryContext(ctx, `
-			SELECT id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time
+			SELECT id, patient_id, amount, payment_mode, paid_date
 			FROM payments
 			WHERE owner_username=:1
 			ORDER BY paid_date DESC
@@ -93,7 +88,7 @@ func (r *PaymentRepo) List(ctx context.Context, owner, patientID string) ([]core
 	var items []core.Payment
 	for rows.Next() {
 		var p core.Payment
-		if err := rows.Scan(&p.ID, &p.PatientID, &p.UniquePaymentID, &p.Amount, &p.Mode, &p.Date, &p.CreatedTime); err != nil {
+		if err := rows.Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &p.Date); err != nil {
 			return nil, err
 		}
 		items = append(items, p)
@@ -161,10 +156,10 @@ func (r *PaymentRepo) Delete(ctx context.Context, owner, id string) error {
 func (r *PaymentRepo) GetByID(ctx context.Context, owner, id string) (core.Payment, error) {
 	var p core.Payment
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, patient_id, unique_payment_id, amount, payment_mode, paid_date, created_time
+		SELECT id, patient_id, amount, payment_mode, paid_date
 		FROM payments
 		WHERE id=:1 AND owner_username=:2
-	`, id, owner).Scan(&p.ID, &p.PatientID, &p.UniquePaymentID, &p.Amount, &p.Mode, &p.Date, &p.CreatedTime)
+	`, id, owner).Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &p.Date)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return p, ErrNotFound

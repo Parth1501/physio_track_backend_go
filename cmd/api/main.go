@@ -78,11 +78,15 @@ func main() {
 
 	// Auth
 	router.POST("/auth/login", authHandler.Login)
+	router.POST("/auth/register", authHandler.RegisterUser)
 
 	// Protected
 	authz := middleware.JWTAuth(cfg.JWTSecret, cfg.JWTIssuer)
 	api := router.Group("/")
 	api.Use(authz)
+
+	// Users
+	api.POST("/users", authHandler.CreateUser)
 
 	// Patients
 	api.POST("/patients", patientHandler.Create)

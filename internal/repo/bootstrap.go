@@ -36,8 +36,6 @@ func BootstrapSchema(ctx context.Context, db *sql.DB) error {
 		     examination VARCHAR2(4000),
 		     rehab VARCHAR2(4000),
 		     diagnosis VARCHAR2(4000),
-		     exercise_table_json CLOB,
-		     exercise_table_raw CLOB,
 		     created_time TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
 		     updated_time TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
 		     last_paid_amount NUMBER,
@@ -51,11 +49,9 @@ func BootstrapSchema(ctx context.Context, db *sql.DB) error {
 		   EXECUTE IMMEDIATE 'CREATE TABLE payments (
 		     id VARCHAR2(36) PRIMARY KEY,
 		     patient_id VARCHAR2(36) NOT NULL,
-		     unique_payment_id VARCHAR2(255) UNIQUE NOT NULL,
 		     amount NUMBER NOT NULL,
 		     payment_mode VARCHAR2(100),
 		     paid_date DATE,
-		     created_time TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
 		     CONSTRAINT fk_payment_patient FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
 		   )';
 		 EXCEPTION
@@ -72,14 +68,16 @@ func BootstrapSchema(ctx context.Context, db *sql.DB) error {
 		 EXCEPTION WHEN OTHERS THEN NULL; END;`,
 		`CREATE INDEX idx_patients_phone ON patients(phone_number)`,
 		`CREATE INDEX idx_payments_patient ON payments(patient_id)`,
-		`CREATE INDEX idx_payments_unique_id ON payments(unique_payment_id)`,
-		// Ensure exercise_table_json has no JSON check constraint and type is CLOB
-		`BEGIN
-		   EXECUTE IMMEDIATE 'ALTER TABLE patients DROP CONSTRAINT SYS_C0030115';
-		 EXCEPTION
-		   WHEN OTHERS THEN
-		     IF SQLCODE != -2443 THEN NULL; END IF; -- constraint does not exist
-		 END;`,
+		`BEGIN EXECUTE IMMEDIATE 'DROP INDEX idx_payments_unique_id';
+		 EXCEPTION WHEN OTHERS THEN NULL; END;`,
+		`BEGIN EXECUTE IMMEDIATE 'ALTER TABLE payments DROP COLUMN unique_payment_id';
+		 EXCEPTION WHEN OTHERS THEN NULL; END;`,
+		`BEGIN EXECUTE IMMEDIATE 'ALTER TABLE payments DROP COLUMN created_time';
+		 EXCEPTION WHEN OTHERS THEN NULL; END;`,
+		`BEGIN EXECUTE IMMEDIATE 'ALTER TABLE patients DROP COLUMN exercise_table_json';
+		 EXCEPTION WHEN OTHERS THEN NULL; END;`,
+		`BEGIN EXECUTE IMMEDIATE 'ALTER TABLE patients DROP COLUMN exercise_table_raw';
+		 EXCEPTION WHEN OTHERS THEN NULL; END;`,
 	}
 
 	for _, stmt := range stmts {
