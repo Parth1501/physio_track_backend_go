@@ -86,6 +86,7 @@ func (jt *JSONTime) UnmarshalJSON(b []byte) error {
 	}
 	layouts := []string{
 		time.RFC3339,
+		"2006-01-02T15:04:05", // IST without zone
 		"2006-01-02T15:04:05", // no zone
 		"2006-01-02",          // date only
 	}
@@ -101,12 +102,12 @@ func (jt *JSONTime) UnmarshalJSON(b []byte) error {
 	return fmt.Errorf("parse time: %w", err)
 }
 
-// MarshalJSON outputs RFC3339 in IST (UTC+05:30).
+// MarshalJSON outputs time in IST without timezone suffix (layout: 2006-01-02T15:04:05).
 func (jt JSONTime) MarshalJSON() ([]byte, error) {
 	if jt.Time.IsZero() {
 		return []byte(`""`), nil
 	}
-	return []byte(`"` + jt.Time.In(istLoc).Format(time.RFC3339) + `"`), nil
+	return []byte(`"` + jt.Time.In(istLoc).Format("2006-01-02T15:04:05") + `"`), nil
 }
 
 // Scan implements sql.Scanner.
