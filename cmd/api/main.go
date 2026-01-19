@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -69,7 +70,23 @@ func main() {
 	patientHandler := handlers.NewPatientHandler(patientRepo)
 	paymentHandler := handlers.NewPaymentHandler(paymentRepo)
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(
+		gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+			return fmt.Sprintf("%s - [%s] \"%s %s %s\" %d %s \"%s\" \"%s\"\n",
+				param.ClientIP,
+				param.TimeStamp.Format(time.RFC3339),
+				param.Method,
+				param.Path,
+				param.Request.Proto,
+				param.StatusCode,
+				param.Latency,
+				param.Request.UserAgent(),
+				param.ErrorMessage,
+			)
+		}),
+		gin.RecoveryWithWriter(mw),
+	)
 
 	// Health
 	router.GET("/health", func(c *gin.Context) {
