@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,7 @@ func NewPaymentRepo(db *sql.DB) *PaymentRepo {
 }
 
 func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment) error {
+	p.Mode = strings.ToUpper(strings.TrimSpace(p.Mode))
 	// Normalize date: if provided without zone, assume local and convert to UTC for storage consistency
 	if !p.Date.Time.IsZero() {
 		p.Date = core.NewJSONTime(ensureUTC(p.Date.Time))
@@ -39,6 +41,7 @@ func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment)
 
 // Upsert inserts or updates a payment keyed by id.
 func (r *PaymentRepo) Upsert(ctx context.Context, owner string, p *core.Payment) error {
+	p.Mode = strings.ToUpper(strings.TrimSpace(p.Mode))
 	if !p.Date.Time.IsZero() {
 		p.Date = core.NewJSONTime(ensureUTC(p.Date.Time))
 	}
@@ -119,7 +122,8 @@ func (r *PaymentRepo) Update(ctx context.Context, owner, id string, upd *core.Pa
 		fields = append(fields, field{name: "amount", val: *upd.Amount})
 	}
 	if upd.Mode != nil {
-		fields = append(fields, field{name: "payment_mode", val: *upd.Mode})
+		mode := strings.ToUpper(strings.TrimSpace(*upd.Mode))
+		fields = append(fields, field{name: "payment_mode", val: mode})
 	}
 	if upd.Date != nil {
 		fields = append(fields, field{name: "paid_date", val: ensureUTC(upd.Date.Time)})
