@@ -40,8 +40,7 @@ func (r *PatientRepo) Create(ctx context.Context, owner string, p *core.Patient)
 			id, full_name, phone_number, age, gender, chief_complaint, present_history,
 			medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
 		) VALUES (
-			:1,:2,:3,:4,:5,:6,:7,:8,:9,:10,:11,:12,:13,:14,
-			:15,:16,:17,:18,:19
+			:1,:2,:3,:4,:5,:6,:7,:8,:9,:10,:11,:12,:13,:14,:15,:16,:17,:18
 		)
 	`,
 		p.ID, p.FullName, p.PhoneNumber, p.Age, p.Gender, p.ChiefComplaint, p.PresentHistory,
@@ -60,7 +59,7 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 	var items []core.Patient
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, full_name, phone_number, age, gender, chief_complaint, present_history,
-		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status
+		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
 		FROM patients
 		WHERE owner_username=:1
 		ORDER BY created_time DESC
@@ -72,12 +71,12 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 
 	for rows.Next() {
 		var p core.Patient
-		var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status sql.NullString
+		var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status, ownerName sql.NullString
 		var age sql.NullInt64
 		var lastPaid sql.NullFloat64
 		if err := rows.Scan(
 			&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
-			&medical, &observation, &palpation, &examination, &rehab, &diagnosis, &p.CreatedTime, &p.UpdatedTime, &lastPaid, &status,
+			&medical, &observation, &palpation, &examination, &rehab, &diagnosis, &p.CreatedTime, &p.UpdatedTime, &lastPaid, &status, &ownerName,
 		); err != nil {
 			return make([]core.Patient, 0), err
 		}
@@ -94,6 +93,7 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		p.Diagnosis = nullStringToString(diagnosis)
 		p.LastPaidAmount = nullFloatToFloat(lastPaid)
 		p.Status = nullStringToString(status)
+		p.OwnerUsername = nullStringToString(ownerName)
 		items = append(items, p)
 	}
 	return items, rows.Err()
@@ -101,18 +101,18 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 
 func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patient, error) {
 	var p core.Patient
-	var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status sql.NullString
+	var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status, ownerName sql.NullString
 	var age sql.NullInt64
 	var lastPaid sql.NullFloat64
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, full_name, phone_number, age, gender, chief_complaint, present_history,
-		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status
+		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
 		FROM patients
 		WHERE id=:1 AND owner_username=:2
 	`, id, owner).Scan(
 		&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
 		&medical, &observation, &palpation, &examination, &rehab, &diagnosis,
-		&p.CreatedTime, &p.UpdatedTime, &lastPaid, &status,
+		&p.CreatedTime, &p.UpdatedTime, &lastPaid, &status, &ownerName,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -133,6 +133,7 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	p.Diagnosis = nullStringToString(diagnosis)
 	p.LastPaidAmount = nullFloatToFloat(lastPaid)
 	p.Status = nullStringToString(status)
+	p.OwnerUsername = nullStringToString(ownerName)
 	return p, nil
 }
 
