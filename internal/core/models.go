@@ -15,24 +15,24 @@ type User struct {
 }
 
 type Patient struct {
-	ID             string    `json:"id"`
-	FullName       string    `json:"full_name"`
-	PhoneNumber    string    `json:"phone_number"`
-	Age            int       `json:"age"`
-	Gender         string    `json:"gender"`
-	ChiefComplaint string    `json:"chief_complaint"`
-	PresentHistory string    `json:"present_history"`
-	MedicalHistory string    `json:"medical_history"`
-	Observation    string    `json:"observation"`
-	Palpation      string    `json:"palpation"`
-	Examination    string    `json:"examination"`
-	Rehab          string    `json:"rehab"`
-	Diagnosis      string    `json:"diagnosis"`
-	CreatedTime    time.Time `json:"created_time,omitempty"`
-	UpdatedTime    time.Time `json:"updated_time,omitempty"`
-	LastPaidAmount float64   `json:"last_paid_amount"`
-	Status         string    `json:"status"`
-	OwnerUsername  string    `json:"-"`
+	ID             string   `json:"id"`
+	FullName       string   `json:"full_name"`
+	PhoneNumber    string   `json:"phone_number"`
+	Age            int      `json:"age"`
+	Gender         string   `json:"gender"`
+	ChiefComplaint string   `json:"chief_complaint"`
+	PresentHistory string   `json:"present_history"`
+	MedicalHistory string   `json:"medical_history"`
+	Observation    string   `json:"observation"`
+	Palpation      string   `json:"palpation"`
+	Examination    string   `json:"examination"`
+	Rehab          string   `json:"rehab"`
+	Diagnosis      string   `json:"diagnosis"`
+	CreatedTime    JSONTime `json:"created_time,omitempty"`
+	UpdatedTime    JSONTime `json:"updated_time,omitempty"`
+	LastPaidAmount float64  `json:"last_paid_amount"`
+	Status         string   `json:"status"`
+	OwnerUsername  string   `json:"-"`
 }
 
 type PatientUpdate struct {
@@ -72,6 +72,8 @@ type JSONTime struct {
 	time.Time
 }
 
+var istLoc = time.FixedZone("IST", 5*3600+1800) // UTC+05:30
+
 // NewJSONTime wraps a time.Time.
 func NewJSONTime(t time.Time) JSONTime { return JSONTime{Time: t} }
 
@@ -99,12 +101,12 @@ func (jt *JSONTime) UnmarshalJSON(b []byte) error {
 	return fmt.Errorf("parse time: %w", err)
 }
 
-// MarshalJSON outputs RFC3339 (UTC).
+// MarshalJSON outputs RFC3339 in IST (UTC+05:30).
 func (jt JSONTime) MarshalJSON() ([]byte, error) {
 	if jt.Time.IsZero() {
 		return []byte(`""`), nil
 	}
-	return []byte(`"` + jt.Time.UTC().Format(time.RFC3339) + `"`), nil
+	return []byte(`"` + jt.Time.In(istLoc).Format(time.RFC3339) + `"`), nil
 }
 
 // Scan implements sql.Scanner.

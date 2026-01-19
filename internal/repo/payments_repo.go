@@ -28,9 +28,9 @@ func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment)
 		return err
 	}
 	p.Mode = strings.ToUpper(strings.TrimSpace(p.Mode))
-	// Normalize date: if provided without zone, assume local and convert to UTC for storage consistency
+	// Normalize date to IST (UTC+05:30)
 	if !p.Date.Time.IsZero() {
-		p.Date = core.NewJSONTime(ensureUTC(p.Date.Time))
+		p.Date = core.NewJSONTime(ensureIST(p.Date.Time))
 	}
 	if p.ID == "" {
 		p.ID = uuid.NewString()
@@ -52,7 +52,7 @@ func (r *PaymentRepo) Upsert(ctx context.Context, owner string, p *core.Payment)
 	}
 	p.Mode = strings.ToUpper(strings.TrimSpace(p.Mode))
 	if !p.Date.Time.IsZero() {
-		p.Date = core.NewJSONTime(ensureUTC(p.Date.Time))
+		p.Date = core.NewJSONTime(ensureIST(p.Date.Time))
 	}
 	if p.ID == "" {
 		p.ID = uuid.NewString()
@@ -113,7 +113,7 @@ func (r *PaymentRepo) List(ctx context.Context, owner, patientID string) ([]core
 			return nil, err
 		}
 		if paid.Valid {
-			p.Date = core.NewJSONTime(paid.Time)
+			p.Date = core.NewJSONTime(ensureIST(paid.Time))
 		}
 		items = append(items, p)
 	}
@@ -147,7 +147,7 @@ func (r *PaymentRepo) Update(ctx context.Context, owner, id string, upd *core.Pa
 		fields = append(fields, field{name: "payment_mode", val: mode})
 	}
 	if upd.Date != nil {
-		fields = append(fields, field{name: "paid_date", val: ensureUTC(upd.Date.Time)})
+		fields = append(fields, field{name: "paid_date", val: ensureIST(upd.Date.Time)})
 	}
 	if len(fields) == 0 {
 		return r.GetByID(ctx, owner, id)
@@ -214,7 +214,7 @@ func (r *PaymentRepo) GetByID(ctx context.Context, owner, id string) (core.Payme
 		return p, err
 	}
 	if paid.Valid {
-		p.Date = core.NewJSONTime(paid.Time)
+		p.Date = core.NewJSONTime(ensureIST(paid.Time))
 	}
 	return p, nil
 }
@@ -236,16 +236,11 @@ func (r *PaymentRepo) assertPatientOwner(ctx context.Context, owner, patientID s
 	return nil
 }
 
-// ensureUTC normalizes times to UTC if they have no location.
-func ensureUTC(t time.Time) time.Time {
+// ensureIST normalizes times to IST (UTC+05:30).
+func ensureIST(t time.Time) time.Time {
 	if t.IsZero() {
 		return t
 	}
-	if t.Location() == time.UTC {
-		return t
-	}
-	if t.Location() == time.Local || t.Location() == nil {
-		return t.UTC()
-	}
-	return t.In(time.UTC)
+	ist := time.FixedZone("IST", 5*3600+1800)
+	return t.In(ist)
 }

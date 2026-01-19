@@ -25,15 +25,18 @@ func (r *PatientRepo) Create(ctx context.Context, owner string, p *core.Patient)
 		p.ID = uuid.NewString()
 	}
 
-	created := p.CreatedTime
+	created := p.CreatedTime.Time
 	if created.IsZero() {
 		created = time.Now()
 	}
-	updated := p.UpdatedTime
+	updated := p.UpdatedTime.Time
 	if updated.IsZero() {
 		updated = created
 	}
 	p.Status = "ACTIVE"
+
+	created = ensureIST(created)
+	updated = ensureIST(updated)
 
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO patients (
@@ -50,8 +53,8 @@ func (r *PatientRepo) Create(ctx context.Context, owner string, p *core.Patient)
 	if err != nil {
 		return err
 	}
-	p.CreatedTime = created
-	p.UpdatedTime = updated
+	p.CreatedTime = core.NewJSONTime(created)
+	p.UpdatedTime = core.NewJSONTime(updated)
 	return nil
 }
 
@@ -74,9 +77,10 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status, ownerName sql.NullString
 		var age sql.NullInt64
 		var lastPaid sql.NullFloat64
+		var created, updated sql.NullTime
 		if err := rows.Scan(
 			&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
-			&medical, &observation, &palpation, &examination, &rehab, &diagnosis, &p.CreatedTime, &p.UpdatedTime, &lastPaid, &status, &ownerName,
+			&medical, &observation, &palpation, &examination, &rehab, &diagnosis, &created, &updated, &lastPaid, &status, &ownerName,
 		); err != nil {
 			return make([]core.Patient, 0), err
 		}
@@ -94,6 +98,12 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		p.LastPaidAmount = nullFloatToFloat(lastPaid)
 		p.Status = nullStringToString(status)
 		p.OwnerUsername = nullStringToString(ownerName)
+		if created.Valid {
+			p.CreatedTime = core.NewJSONTime(ensureIST(created.Time))
+		}
+		if updated.Valid {
+			p.UpdatedTime = core.NewJSONTime(ensureIST(updated.Time))
+		}
 		items = append(items, p)
 	}
 	return items, rows.Err()
@@ -104,6 +114,7 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status, ownerName sql.NullString
 	var age sql.NullInt64
 	var lastPaid sql.NullFloat64
+	var created, updated sql.NullTime
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, full_name, phone_number, age, gender, chief_complaint, present_history,
 		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
@@ -112,7 +123,7 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	`, id, owner).Scan(
 		&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
 		&medical, &observation, &palpation, &examination, &rehab, &diagnosis,
-		&p.CreatedTime, &p.UpdatedTime, &lastPaid, &status, &ownerName,
+		&created, &updated, &lastPaid, &status, &ownerName,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -134,6 +145,12 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	p.LastPaidAmount = nullFloatToFloat(lastPaid)
 	p.Status = nullStringToString(status)
 	p.OwnerUsername = nullStringToString(ownerName)
+	if created.Valid {
+		p.CreatedTime = core.NewJSONTime(ensureIST(created.Time))
+	}
+	if updated.Valid {
+		p.UpdatedTime = core.NewJSONTime(ensureIST(updated.Time))
+	}
 	return p, nil
 }
 
