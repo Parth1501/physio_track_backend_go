@@ -178,7 +178,7 @@ func importPayments(ctx context.Context, paymentRepo *repo.PaymentRepo, owner st
 			PatientID: uuidForString(get(row, 0)),
 			Amount:    atof(get(row, 2)),
 			Mode:      get(row, 3),
-			Date:      parseDate(get(row, 4)),
+			Date:      core.NewJSONTime(parseDate(get(row, 4))),
 		}
 		if p.PatientID == "" {
 			fmt.Printf("skipping payment row %d: empty patient_id\n", i+2)

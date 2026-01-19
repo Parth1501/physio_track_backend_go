@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -19,6 +20,10 @@ func NewPaymentRepo(db *sql.DB) *PaymentRepo {
 }
 
 func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment) error {
+	// Normalize date: if provided without zone, assume local and convert to UTC for storage consistency
+	if !p.Date.Time.IsZero() {
+		p.Date = core.NewJSONTime(ensureUTC(p.Date.Time))
+	}
 	if p.ID == "" {
 		p.ID = uuid.NewString()
 	}
@@ -34,6 +39,9 @@ func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment)
 
 // Upsert inserts or updates a payment keyed by id.
 func (r *PaymentRepo) Upsert(ctx context.Context, owner string, p *core.Payment) error {
+	if !p.Date.Time.IsZero() {
+		p.Date = core.NewJSONTime(ensureUTC(p.Date.Time))
+	}
 	if p.ID == "" {
 		p.ID = uuid.NewString()
 	}
@@ -88,8 +96,12 @@ func (r *PaymentRepo) List(ctx context.Context, owner, patientID string) ([]core
 	var items []core.Payment
 	for rows.Next() {
 		var p core.Payment
-		if err := rows.Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &p.Date); err != nil {
+		var paid sql.NullTime
+		if err := rows.Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &paid); err != nil {
 			return nil, err
+		}
+		if paid.Valid {
+			p.Date = core.NewJSONTime(paid.Time)
 		}
 		items = append(items, p)
 	}
@@ -110,7 +122,7 @@ func (r *PaymentRepo) Update(ctx context.Context, owner, id string, upd *core.Pa
 		fields = append(fields, field{name: "payment_mode", val: *upd.Mode})
 	}
 	if upd.Date != nil {
-		fields = append(fields, field{name: "paid_date", val: *upd.Date})
+		fields = append(fields, field{name: "paid_date", val: ensureUTC(upd.Date.Time)})
 	}
 	if len(fields) == 0 {
 		return r.GetByID(ctx, owner, id)
@@ -155,16 +167,34 @@ func (r *PaymentRepo) Delete(ctx context.Context, owner, id string) error {
 
 func (r *PaymentRepo) GetByID(ctx context.Context, owner, id string) (core.Payment, error) {
 	var p core.Payment
+	var paid sql.NullTime
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, patient_id, amount, payment_mode, paid_date
 		FROM payments
 		WHERE id=:1 AND owner_username=:2
-	`, id, owner).Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &p.Date)
+	`, id, owner).Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &paid)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return p, ErrNotFound
 		}
 		return p, err
 	}
+	if paid.Valid {
+		p.Date = core.NewJSONTime(paid.Time)
+	}
 	return p, nil
+}
+
+// ensureUTC normalizes times to UTC if they have no location.
+func ensureUTC(t time.Time) time.Time {
+	if t.IsZero() {
+		return t
+	}
+	if t.Location() == time.UTC {
+		return t
+	}
+	if t.Location() == time.Local || t.Location() == nil {
+		return t.UTC()
+	}
+	return t.In(time.UTC)
 }
