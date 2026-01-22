@@ -3,10 +3,8 @@ package repo
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -16,8 +14,6 @@ import (
 type PaymentRepo struct {
 	db *sql.DB
 }
-
-var ErrForbidden = errors.New("forbidden")
 
 func NewPaymentRepo(db *sql.DB) *PaymentRepo {
 	return &PaymentRepo{db: db}
