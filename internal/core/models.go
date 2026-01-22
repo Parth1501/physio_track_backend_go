@@ -72,8 +72,6 @@ type JSONTime struct {
 	time.Time
 }
 
-var istLoc = time.FixedZone("IST", 5*3600+1800) // UTC+05:30
-
 // NewJSONTime wraps a time.Time.
 func NewJSONTime(t time.Time) JSONTime { return JSONTime{Time: t} }
 
@@ -86,9 +84,10 @@ func (jt *JSONTime) UnmarshalJSON(b []byte) error {
 	}
 	layouts := []string{
 		time.RFC3339,
-		"2006-01-02T15:04:05", // IST without zone
 		"2006-01-02T15:04:05", // no zone
 		"2006-01-02",          // date only
+		"02-01-2006",          // dd-MM-YYYY
+		"02-01-2006 15:04:05", // dd-MM-YYYY HH:MM:SS
 	}
 	var parsed time.Time
 	var err error
@@ -102,12 +101,12 @@ func (jt *JSONTime) UnmarshalJSON(b []byte) error {
 	return fmt.Errorf("parse time: %w", err)
 }
 
-// MarshalJSON outputs time in IST without timezone suffix (layout: 2006-01-02T15:04:05).
+// MarshalJSON outputs time without timezone suffix (layout: 2006-01-02T15:04:05).
 func (jt JSONTime) MarshalJSON() ([]byte, error) {
 	if jt.Time.IsZero() {
 		return []byte(`""`), nil
 	}
-	return []byte(`"` + jt.Time.In(istLoc).Format("2006-01-02T15:04:05") + `"`), nil
+	return []byte(`"` + jt.Time.Format("2006-01-02T15:04:05") + `"`), nil
 }
 
 // Scan implements sql.Scanner.

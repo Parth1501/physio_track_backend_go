@@ -35,9 +35,6 @@ func (r *PatientRepo) Create(ctx context.Context, owner string, p *core.Patient)
 	}
 	p.Status = "ACTIVE"
 
-	created = ensureIST(created)
-	updated = ensureIST(updated)
-
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO patients (
 			id, full_name, phone_number, age, gender, chief_complaint, present_history,
@@ -99,10 +96,10 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		p.Status = nullStringToString(status)
 		p.OwnerUsername = nullStringToString(ownerName)
 		if created.Valid {
-			p.CreatedTime = core.NewJSONTime(ensureIST(created.Time))
+			p.CreatedTime = core.NewJSONTime(created.Time)
 		}
 		if updated.Valid {
-			p.UpdatedTime = core.NewJSONTime(ensureIST(updated.Time))
+			p.UpdatedTime = core.NewJSONTime(updated.Time)
 		}
 		items = append(items, p)
 	}
@@ -146,10 +143,10 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	p.Status = nullStringToString(status)
 	p.OwnerUsername = nullStringToString(ownerName)
 	if created.Valid {
-		p.CreatedTime = core.NewJSONTime(ensureIST(created.Time))
+		p.CreatedTime = core.NewJSONTime(created.Time)
 	}
 	if updated.Valid {
-		p.UpdatedTime = core.NewJSONTime(ensureIST(updated.Time))
+		p.UpdatedTime = core.NewJSONTime(updated.Time)
 	}
 	return p, nil
 }
