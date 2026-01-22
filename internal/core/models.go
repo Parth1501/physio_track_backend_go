@@ -15,24 +15,24 @@ type User struct {
 }
 
 type Patient struct {
-	ID             string    `json:"id"`
-	FullName       string    `json:"full_name"`
-	PhoneNumber    string    `json:"phone_number"`
-	Age            int       `json:"age"`
-	Gender         string    `json:"gender"`
-	ChiefComplaint string    `json:"chief_complaint"`
-	PresentHistory string    `json:"present_history"`
-	MedicalHistory string    `json:"medical_history"`
-	Observation    string    `json:"observation"`
-	Palpation      string    `json:"palpation"`
-	Examination    string    `json:"examination"`
-	Rehab          string    `json:"rehab"`
-	Diagnosis      string    `json:"diagnosis"`
-	CreatedTime    time.Time `json:"created_time,omitempty"`
-	UpdatedTime    time.Time `json:"updated_time,omitempty"`
-	LastPaidAmount float64   `json:"last_paid_amount"`
-	Status         string    `json:"status"`
-	OwnerUsername  string    `json:"-"`
+	ID             string   `json:"id"`
+	FullName       string   `json:"full_name"`
+	PhoneNumber    string   `json:"phone_number"`
+	Age            int      `json:"age"`
+	Gender         string   `json:"gender"`
+	ChiefComplaint string   `json:"chief_complaint"`
+	PresentHistory string   `json:"present_history"`
+	MedicalHistory string   `json:"medical_history"`
+	Observation    string   `json:"observation"`
+	Palpation      string   `json:"palpation"`
+	Examination    string   `json:"examination"`
+	Rehab          string   `json:"rehab"`
+	Diagnosis      string   `json:"diagnosis"`
+	CreatedTime    JSONTime `json:"created_time,omitempty"`
+	UpdatedTime    JSONTime `json:"updated_time,omitempty"`
+	LastPaidAmount float64  `json:"last_paid_amount"`
+	Status         string   `json:"status"`
+	OwnerUsername  string   `json:"-"`
 }
 
 type PatientUpdate struct {

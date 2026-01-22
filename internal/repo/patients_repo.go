@@ -25,11 +25,11 @@ func (r *PatientRepo) Create(ctx context.Context, owner string, p *core.Patient)
 		p.ID = uuid.NewString()
 	}
 
-	created := p.CreatedTime
+	created := p.CreatedTime.Time
 	if created.IsZero() {
 		created = time.Now()
 	}
-	updated := p.UpdatedTime
+	updated := p.UpdatedTime.Time
 	if updated.IsZero() {
 		updated = created
 	}
@@ -50,8 +50,8 @@ func (r *PatientRepo) Create(ctx context.Context, owner string, p *core.Patient)
 	if err != nil {
 		return err
 	}
-	p.CreatedTime = created
-	p.UpdatedTime = updated
+	p.CreatedTime = core.NewJSONTime(created)
+	p.UpdatedTime = core.NewJSONTime(updated)
 	return nil
 }
 
@@ -74,7 +74,7 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status, ownerName sql.NullString
 		var age sql.NullInt64
 		var lastPaid sql.NullFloat64
-		var created, updated time.Time
+		var created, updated sql.NullTime
 		if err := rows.Scan(
 			&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
 			&medical, &observation, &palpation, &examination, &rehab, &diagnosis, &created, &updated, &lastPaid, &status, &ownerName,
@@ -95,8 +95,12 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		p.LastPaidAmount = nullFloatToFloat(lastPaid)
 		p.Status = nullStringToString(status)
 		p.OwnerUsername = nullStringToString(ownerName)
-		p.CreatedTime = created
-		p.UpdatedTime = updated
+		if created.Valid {
+			p.CreatedTime = core.NewJSONTime(created.Time)
+		}
+		if updated.Valid {
+			p.UpdatedTime = core.NewJSONTime(updated.Time)
+		}
 		items = append(items, p)
 	}
 	return items, rows.Err()
@@ -107,7 +111,7 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	var phone, gender, chief, present, medical, observation, palpation, examination, rehab, diagnosis, status, ownerName sql.NullString
 	var age sql.NullInt64
 	var lastPaid sql.NullFloat64
-	var created, updated time.Time
+	var created, updated sql.NullTime
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, full_name, phone_number, age, gender, chief_complaint, present_history,
 		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
@@ -138,8 +142,12 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	p.LastPaidAmount = nullFloatToFloat(lastPaid)
 	p.Status = nullStringToString(status)
 	p.OwnerUsername = nullStringToString(ownerName)
-	p.CreatedTime = created
-	p.UpdatedTime = updated
+	if created.Valid {
+		p.CreatedTime = core.NewJSONTime(created.Time)
+	}
+	if updated.Valid {
+		p.UpdatedTime = core.NewJSONTime(updated.Time)
+	}
 	return p, nil
 }
 
