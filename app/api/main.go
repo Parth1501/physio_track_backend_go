@@ -41,6 +41,7 @@ func main() {
 	if err := repo.BootstrapSchema(ctx, dbpool); err != nil {
 		log.Fatalf("failed to bootstrap schema: %v", err)
 	}
+	repo.StartDailyDBKeepAlive(dbpool)
 
 	// Repos
 	userRepo := repo.NewUserRepo(dbpool)
