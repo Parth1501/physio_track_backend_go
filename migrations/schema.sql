@@ -52,6 +52,7 @@ BEGIN
       amount NUMBER NOT NULL,
       payment_mode VARCHAR2(100),
       paid_date DATE,
+      partial_of VARCHAR2(36),
       CONSTRAINT fk_payment_patient FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
     )';
 EXCEPTION

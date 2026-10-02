@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"math"
 	"strconv"
 	"strings"
 
@@ -82,14 +83,14 @@ func (r *PaymentRepo) List(ctx context.Context, owner, patientID string) ([]core
 	var err error
 	if patientID != "" && patientID != "ALL" {
 		rows, err = r.db.QueryContext(ctx, `
-			SELECT id, patient_id, amount, payment_mode, paid_date
+			SELECT id, patient_id, amount, payment_mode, paid_date, partial_of
 			FROM payments
 			WHERE patient_id=:1 AND owner_username=:2
 			ORDER BY paid_date DESC
 		`, patientID, owner)
 	} else {
 		rows, err = r.db.QueryContext(ctx, `
-			SELECT id, patient_id, amount, payment_mode, paid_date
+			SELECT id, patient_id, amount, payment_mode, paid_date, partial_of
 			FROM payments
 			WHERE owner_username=:1
 			ORDER BY paid_date DESC
@@ -104,9 +105,11 @@ func (r *PaymentRepo) List(ctx context.Context, owner, patientID string) ([]core
 	for rows.Next() {
 		var p core.Payment
 		var paid sql.NullTime
-		if err := rows.Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &paid); err != nil {
+		var partialOf sql.NullString
+		if err := rows.Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &paid, &partialOf); err != nil {
 			return nil, err
 		}
+		p.PartialOf = partialOf.String
 		if paid.Valid {
 			p.Date = core.NewJSONTime(paid.Time)
 		}
@@ -187,7 +190,17 @@ func (r *PaymentRepo) Delete(ctx context.Context, owner, id string) error {
 		return err
 	}
 
-	cmd, err := r.db.ExecContext(ctx, `DELETE FROM payments WHERE id=:1 AND owner_username=:2`, id, owner)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// A partial paid row whose pending row is deleted becomes a standalone paid row.
+	if _, err := tx.ExecContext(ctx, `UPDATE payments SET partial_of=NULL WHERE partial_of=:1 AND owner_username=:2`, id, owner); err != nil {
+		return err
+	}
+	cmd, err := tx.ExecContext(ctx, `DELETE FROM payments WHERE id=:1 AND owner_username=:2`, id, owner)
 	if err != nil {
 		return err
 	}
@@ -198,23 +211,186 @@ func (r *PaymentRepo) Delete(ctx context.Context, owner, id string) error {
 	if rows == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit()
+}
+
+const amountEpsilon = 0.005
+
+type pendingRow struct {
+	id     string
+	amount float64
+	date   sql.NullTime
+}
+
+type partialRow struct {
+	id     string
+	amount float64
+	mode   string
+}
+
+// Settle applies amount to the patient's pending payments oldest-first in one transaction.
+// A session paid in parts keeps a single paid row, linked to its pending row via partial_of
+// until the session is fully paid.
+func (r *PaymentRepo) Settle(ctx context.Context, owner, patientID string, amount float64, mode string) error {
+	if err := r.assertPatientOwner(ctx, owner, patientID); err != nil {
+		return err
+	}
+	mode = strings.ToUpper(strings.TrimSpace(mode))
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	pending, err := loadPending(ctx, tx, owner, patientID)
+	if err != nil {
+		return err
+	}
+	partials, err := loadPartials(ctx, tx, owner, patientID)
+	if err != nil {
+		return err
+	}
+
+	total := 0.0
+	for _, p := range pending {
+		total += p.amount
+	}
+	if amount > total+amountEpsilon {
+		return ErrExceedsPending
+	}
+
+	remaining := amount
+	for _, p := range pending {
+		if remaining <= amountEpsilon {
+			break
+		}
+		pay := math.Min(remaining, p.amount)
+		remaining -= pay
+		left := p.amount - pay
+		fullyPaid := left <= amountEpsilon
+
+		// Paid side is written before the pending side for each session.
+		if partner, ok := partials[p.id]; ok {
+			var link interface{} = p.id
+			if fullyPaid {
+				link = nil
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE payments SET amount=:1, payment_mode=:2, partial_of=:3
+				WHERE id=:4 AND owner_username=:5
+			`, partner.amount+pay, mergedMode(partner, pay, mode), link, partner.id, owner); err != nil {
+				return err
+			}
+			if fullyPaid {
+				_, err = tx.ExecContext(ctx, `DELETE FROM payments WHERE id=:1 AND owner_username=:2`, p.id, owner)
+			} else {
+				_, err = tx.ExecContext(ctx, `UPDATE payments SET amount=:1 WHERE id=:2 AND owner_username=:3`, left, p.id, owner)
+			}
+			if err != nil {
+				return err
+			}
+		} else if fullyPaid {
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE payments SET payment_mode=:1 WHERE id=:2 AND owner_username=:3
+			`, mode, p.id, owner); err != nil {
+				return err
+			}
+		} else {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO payments (id, patient_id, amount, payment_mode, paid_date, owner_username, partial_of)
+				VALUES (:1,:2,:3,:4,:5,:6,:7)
+			`, uuid.NewString(), patientID, pay, mode, p.date, owner, p.id); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE payments SET amount=:1 WHERE id=:2 AND owner_username=:3
+			`, left, p.id, owner); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
+// mergedMode picks the mode of the larger part of a session paid in parts; ONLINE on a tie.
+func mergedMode(partner partialRow, pay float64, mode string) string {
+	switch {
+	case math.Abs(pay-partner.amount) <= amountEpsilon:
+		return "ONLINE"
+	case pay > partner.amount:
+		return mode
+	default:
+		return partner.mode
+	}
+}
+
+func loadPending(ctx context.Context, tx *sql.Tx, owner, patientID string) ([]pendingRow, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, amount, paid_date
+		FROM payments
+		WHERE patient_id=:1 AND owner_username=:2 AND payment_mode='PENDING'
+		ORDER BY paid_date ASC, id ASC
+		FOR UPDATE
+	`, patientID, owner)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []pendingRow
+	for rows.Next() {
+		var p pendingRow
+		if err := rows.Scan(&p.id, &p.amount, &p.date); err != nil {
+			return nil, err
+		}
+		items = append(items, p)
+	}
+	return items, rows.Err()
+}
+
+func loadPartials(ctx context.Context, tx *sql.Tx, owner, patientID string) (map[string]partialRow, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, amount, payment_mode, partial_of
+		FROM payments
+		WHERE patient_id=:1 AND owner_username=:2 AND partial_of IS NOT NULL
+		FOR UPDATE
+	`, patientID, owner)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := map[string]partialRow{}
+	for rows.Next() {
+		var p partialRow
+		var mode sql.NullString
+		var pendingID string
+		if err := rows.Scan(&p.id, &p.amount, &mode, &pendingID); err != nil {
+			return nil, err
+		}
+		p.mode = strings.ToUpper(mode.String)
+		items[pendingID] = p
+	}
+	return items, rows.Err()
 }
 
 func (r *PaymentRepo) GetByID(ctx context.Context, owner, id string) (core.Payment, error) {
 	var p core.Payment
 	var paid sql.NullTime
+	var partialOf sql.NullString
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, patient_id, amount, payment_mode, paid_date
+		SELECT id, patient_id, amount, payment_mode, paid_date, partial_of
 		FROM payments
 		WHERE id=:1 AND owner_username=:2
-	`, id, owner).Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &paid)
+	`, id, owner).Scan(&p.ID, &p.PatientID, &p.Amount, &p.Mode, &paid, &partialOf)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return p, ErrNotFound
 		}
 		return p, err
 	}
+	p.PartialOf = partialOf.String
 	if paid.Valid {
 		p.Date = core.NewJSONTime(paid.Time)
 	}

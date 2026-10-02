@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -60,6 +61,44 @@ func (h *PaymentHandler) Update(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, updated)
+}
+
+type settleRequest struct {
+	PatientID string  `json:"patient_id"`
+	Amount    float64 `json:"amount"`
+	Mode      string  `json:"mode"`
+}
+
+// Settle applies a lump-sum payment to the patient's pending sessions and returns the updated payment list.
+func (h *PaymentHandler) Settle(c *gin.Context) {
+	var req settleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
+	if req.PatientID == "" || req.Amount <= 0 || (mode != "CASH" && mode != "ONLINE") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "patient_id, a positive amount and mode CASH or ONLINE are required"})
+		return
+	}
+	owner := c.GetString("user")
+	if err := h.repo.Settle(c, owner, req.PatientID, req.Amount, mode); err != nil {
+		status := http.StatusInternalServerError
+		switch err {
+		case repo.ErrExceedsPending:
+			status = http.StatusBadRequest
+		case repo.ErrForbidden:
+			status = http.StatusForbidden
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	items, err := h.repo.List(c, owner, req.PatientID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, items)
 }
 
 func (h *PaymentHandler) Delete(c *gin.Context) {

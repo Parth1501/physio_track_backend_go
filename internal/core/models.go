@@ -58,6 +58,7 @@ type Payment struct {
 	Amount        float64  `json:"amount"`
 	Mode          string   `json:"mode"`
 	Date          JSONTime `json:"date"`
+	PartialOf     string   `json:"partial_of,omitempty"`
 	OwnerUsername string   `json:"-"`
 }
 

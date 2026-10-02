@@ -114,6 +114,7 @@ func main() {
 
 	// Payments
 	api.POST("/payments", paymentHandler.Create)
+	api.POST("/payments/settle", paymentHandler.Settle)
 	api.GET("/payments", paymentHandler.List)
 	api.PATCH("/payments/:id", paymentHandler.Update)
 	api.DELETE("/payments/:id", paymentHandler.Delete)
