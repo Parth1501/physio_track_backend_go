@@ -23,7 +23,7 @@ func TestGroupByMonth(t *testing.T) {
 	}
 }
 
-func TestSessionTextCapsRecentDates(t *testing.T) {
+func TestSessionTextShowsLastSessionOnly(t *testing.T) {
 	var all []time.Time
 	start := day("2026-09-01")
 	for i := 0; i < 12; i++ {
@@ -31,13 +31,13 @@ func TestSessionTextCapsRecentDates(t *testing.T) {
 	}
 	text := SessionText("Rahul", all[11], all, "")
 
-	for _, want := range []string{"Dear Rahul,", "Session date: *Saturday, 12 September 2026*", "Total sessions attended: *12*", "Recent sessions:", "Sep 2026: 03, 04, 05, 06, 07, 08, 09, 10, 11, 12"} {
+	for _, want := range []string{"Dear Rahul,", "Last session: *Saturday, 12 September 2026*", "Total sessions attended: *12*"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("SessionText missing %q:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, "01, 02") {
-		t.Errorf("SessionText should list only the last %d dates:\n%s", RecentLimit, text)
+	if strings.Contains(text, "Session history") || strings.Contains(text, "Sep 2026:") {
+		t.Errorf("SessionText should not list the session history:\n%s", text)
 	}
 	if !strings.HasSuffix(text, "Thank you.") || strings.Contains(text, "regards") {
 		t.Errorf("SessionText without a signature should end with a plain thank-you:\n%s", text)

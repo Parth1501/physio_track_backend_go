@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// RecentLimit is how many session dates the per-session message lists.
-const RecentLimit = 10
-
 const fullDateLayout = "Monday, 02 January 2006"
 
 // message is the shared layout of every patient message: greeting, intro, key facts,
@@ -26,23 +23,18 @@ type message struct {
 	signature    string
 }
 
-// SessionText builds the message sent after a session is recorded.
+// SessionText builds the short message sent after a session is recorded: the session just
+// completed and the running total. The full date list is left to SummaryText.
 func SessionText(name string, session time.Time, all []time.Time, signature string) string {
-	history, title := all, "Session history:"
-	if len(history) > RecentLimit {
-		history, title = history[len(history)-RecentLimit:], "Recent sessions:"
-	}
 	return message{
 		name:  name,
 		intro: "This is to confirm that your physiotherapy session has been completed.",
 		facts: []string{
-			"Session date: " + bold(session.Format(fullDateLayout)),
+			"Last session: " + bold(session.Format(fullDateLayout)),
 			"Total sessions attended: " + bold(strconv.Itoa(len(all))),
 		},
-		historyTitle: title,
-		history:      history,
-		outro:        "We look forward to seeing you at your next session.",
-		signature:    signature,
+		outro:     "We look forward to seeing you at your next session.",
+		signature: signature,
 	}.String()
 }
 
