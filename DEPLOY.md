@@ -79,7 +79,7 @@
    - `GET /patients/:id/whatsapp-message?kind=session&payment_id=...` or `?kind=summary` → `{phone, text, url}`.
      Builds a pre-filled WhatsApp message (session dates and counts, never amounts) for an Indian mobile number;
      the app opens `url` (wa.me click-to-chat) so it is sent from the physiotherapist's own WhatsApp.
-     400 = no sessions / missing or invalid phone, 409 = patient opted out (`whatsapp_opt_in=false` via `PATCH /patients/:id`).
+     400 = no sessions / missing or invalid phone, 409 = patient opted out of session messages (`whatsapp_opt_in=false` via `PATCH /patients/:id`); summaries are always allowed.
 
 8) **Android client usage**
    - Login once, cache token, send `Authorization: Bearer <token>` header.

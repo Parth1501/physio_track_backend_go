@@ -46,7 +46,8 @@ func (h *WhatsAppHandler) Message(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	if patient.WhatsAppOptIn != nil && !*patient.WhatsAppOptIn {
+	// The opt-out only stops the automatic prompt after a session; the summary is always sent on demand.
+	if kind == "session" && patient.WhatsAppOptIn != nil && !*patient.WhatsAppOptIn {
 		c.JSON(http.StatusConflict, gin.H{"error": "patient opted out of WhatsApp updates"})
 		return
 	}
