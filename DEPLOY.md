@@ -13,7 +13,7 @@
      JWT_SECRET=change-me
      JWT_ISSUER=phsio-track
      JWT_EXPIRY_MIN=60
-     WHATSAPP_SIGNATURE="Dr. Dency"   # optional, appended to WhatsApp messages
+     WHATSAPP_SIGNATURE="Dr. Dency Singwala\n(MPT, COMT, CKT)"   # optional, this is the default; \n starts a new line
      ```
 
 2) **Build (Ampere 1 OCPU / 1 GB)**

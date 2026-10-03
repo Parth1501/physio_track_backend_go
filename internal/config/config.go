@@ -4,10 +4,14 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
 )
+
+// defaultWhatsAppSignature closes WhatsApp messages sent to patients.
+const defaultWhatsAppSignature = "Dr. Dency Singwala\n(MPT, COMT, CKT)"
 
 // Config holds runtime configuration values.
 type Config struct {
@@ -21,7 +25,7 @@ type Config struct {
 	JWTSecret       string
 	JWTIssuer       string
 	JWTExpiry       time.Duration
-	// WhatsAppSignature is appended to WhatsApp messages sent to patients (optional).
+	// WhatsAppSignature closes WhatsApp messages sent to patients.
 	WhatsAppSignature string
 }
 
@@ -41,7 +45,8 @@ func Load() Config {
 		JWTIssuer:       getEnv("JWT_ISSUER", "phsio-track"),
 		JWTExpiry:       getEnvDuration("JWT_EXPIRY_MIN", 60) * time.Minute,
 
-		WhatsAppSignature: getEnv("WHATSAPP_SIGNATURE", ""),
+		// A literal \n in the env value starts a new line in the signature.
+		WhatsAppSignature: strings.ReplaceAll(getEnv("WHATSAPP_SIGNATURE", defaultWhatsAppSignature), `\n`, "\n"),
 	}
 
 	if cfg.DBUser == "" || cfg.DBPassword == "" || cfg.DBConnectString == "" || cfg.TNSAdmin == "" {

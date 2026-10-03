@@ -20,14 +20,15 @@ func SessionText(name string, session time.Time, all []time.Time, signature stri
 	}
 	var b strings.Builder
 	b.WriteString(greeting(name))
-	b.WriteString("Your physiotherapy session on *" + session.Format("02 Jan 2006") + "* has been recorded ✅\n\n")
-	b.WriteString("Total sessions so far: *" + strconv.Itoa(len(all)) + "*\n")
+	b.WriteString("This is to confirm that your physiotherapy session on *" + session.Format("02 Jan 2006") + "* has been completed.\n\n")
+	b.WriteString("Total sessions attended: *" + strconv.Itoa(len(all)) + "*\n")
 	if len(all) > len(recent) {
-		b.WriteString("Recent sessions:\n")
+		b.WriteString("Recent session dates:\n")
 	} else {
-		b.WriteString("Sessions:\n")
+		b.WriteString("Session dates:\n")
 	}
 	writeDates(&b, recent)
+	b.WriteString("\nWe look forward to seeing you at your next session.\n")
 	writeClosing(&b, signature)
 	return b.String()
 }
@@ -36,10 +37,11 @@ func SessionText(name string, session time.Time, all []time.Time, signature stri
 func SummaryText(name string, all []time.Time, signature string) string {
 	var b strings.Builder
 	b.WriteString(greeting(name))
-	b.WriteString("Here is your physiotherapy session summary.\n\n")
-	b.WriteString("Total sessions: *" + strconv.Itoa(len(all)) + "*\n")
+	b.WriteString("Please find below a summary of your physiotherapy sessions.\n\n")
+	b.WriteString("Total sessions attended: *" + strconv.Itoa(len(all)) + "*\n")
 	b.WriteString("Session dates:\n")
 	writeDates(&b, all)
+	b.WriteString("\nFor any queries, please feel free to reach out.\n")
 	writeClosing(&b, signature)
 	return b.String()
 }
@@ -53,9 +55,9 @@ func ChatURL(phone, text string) string {
 func greeting(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "Hi,\n"
+		return "Dear Patient,\n\n"
 	}
-	return "Hi " + name + ",\n"
+	return "Dear " + name + ",\n\n"
 }
 
 func writeDates(b *strings.Builder, dates []time.Time) {
@@ -64,11 +66,13 @@ func writeDates(b *strings.Builder, dates []time.Time) {
 	}
 }
 
+// writeClosing ends the message with the signature, which may span several lines (name, qualifications).
 func writeClosing(b *strings.Builder, signature string) {
-	b.WriteString("\nThank you!")
 	if s := strings.TrimSpace(signature); s != "" {
-		b.WriteString("\n— " + s)
+		b.WriteString("\nWarm regards,\n" + s)
+		return
 	}
+	b.WriteString("\nThank you.")
 }
 
 // groupByMonth renders dates oldest first as one line per month, e.g. "Oct 2026: 01, 02, 03".
