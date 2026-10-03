@@ -32,6 +32,7 @@ type Patient struct {
 	UpdatedTime    JSONTime `json:"updated_time,omitempty"`
 	LastPaidAmount float64  `json:"last_paid_amount"`
 	Status         string   `json:"status"`
+	WhatsAppOptIn  *bool    `json:"whatsapp_opt_in"`
 	OwnerUsername  string   `json:"-"`
 }
 
@@ -50,6 +51,7 @@ type PatientUpdate struct {
 	Diagnosis      *string  `json:"diagnosis,omitempty"`
 	LastPaidAmount *float64 `json:"last_paid_amount,omitempty"`
 	Status         *string  `json:"status,omitempty"`
+	WhatsAppOptIn  *bool    `json:"whatsapp_opt_in,omitempty"`
 }
 
 type Payment struct {

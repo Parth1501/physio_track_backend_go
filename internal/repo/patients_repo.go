@@ -34,18 +34,22 @@ func (r *PatientRepo) Create(ctx context.Context, owner string, p *core.Patient)
 		updated = created
 	}
 	p.Status = "ACTIVE"
+	if p.WhatsAppOptIn == nil {
+		optIn := true
+		p.WhatsAppOptIn = &optIn
+	}
 
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO patients (
 			id, full_name, phone_number, age, gender, chief_complaint, present_history,
-			medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
+			medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username, whatsapp_opt_in
 		) VALUES (
-			:1,:2,:3,:4,:5,:6,:7,:8,:9,:10,:11,:12,:13,:14,:15,:16,:17,:18
+			:1,:2,:3,:4,:5,:6,:7,:8,:9,:10,:11,:12,:13,:14,:15,:16,:17,:18,:19
 		)
 	`,
 		p.ID, p.FullName, p.PhoneNumber, p.Age, p.Gender, p.ChiefComplaint, p.PresentHistory,
 		p.MedicalHistory, p.Observation, p.Palpation, p.Examination, p.Rehab, p.Diagnosis, created, updated,
-		p.LastPaidAmount, p.Status, owner,
+		p.LastPaidAmount, p.Status, owner, boolToNumber(*p.WhatsAppOptIn),
 	)
 	if err != nil {
 		return err
@@ -59,7 +63,7 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 	var items []core.Patient
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, full_name, phone_number, age, gender, chief_complaint, present_history,
-		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
+		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username, whatsapp_opt_in
 		FROM patients
 		WHERE owner_username=:1
 		ORDER BY created_time DESC
@@ -75,9 +79,10 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		var age sql.NullInt64
 		var lastPaid sql.NullFloat64
 		var created, updated sql.NullTime
+		var optIn sql.NullInt64
 		if err := rows.Scan(
 			&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
-			&medical, &observation, &palpation, &examination, &rehab, &diagnosis, &created, &updated, &lastPaid, &status, &ownerName,
+			&medical, &observation, &palpation, &examination, &rehab, &diagnosis, &created, &updated, &lastPaid, &status, &ownerName, &optIn,
 		); err != nil {
 			return make([]core.Patient, 0), err
 		}
@@ -95,6 +100,7 @@ func (r *PatientRepo) List(ctx context.Context, owner string) ([]core.Patient, e
 		p.LastPaidAmount = nullFloatToFloat(lastPaid)
 		p.Status = nullStringToString(status)
 		p.OwnerUsername = nullStringToString(ownerName)
+		p.WhatsAppOptIn = optInFromNumber(optIn)
 		if created.Valid {
 			p.CreatedTime = core.NewJSONTime(created.Time)
 		}
@@ -112,15 +118,16 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	var age sql.NullInt64
 	var lastPaid sql.NullFloat64
 	var created, updated sql.NullTime
+	var optIn sql.NullInt64
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, full_name, phone_number, age, gender, chief_complaint, present_history,
-		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username
+		       medical_history, observation, palpation, examination, rehab, diagnosis, created_time, updated_time, last_paid_amount, status, owner_username, whatsapp_opt_in
 		FROM patients
 		WHERE id=:1 AND owner_username=:2
 	`, id, owner).Scan(
 		&p.ID, &p.FullName, &phone, &age, &gender, &chief, &present,
 		&medical, &observation, &palpation, &examination, &rehab, &diagnosis,
-		&created, &updated, &lastPaid, &status, &ownerName,
+		&created, &updated, &lastPaid, &status, &ownerName, &optIn,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -142,6 +149,7 @@ func (r *PatientRepo) GetByID(ctx context.Context, owner, id string) (core.Patie
 	p.LastPaidAmount = nullFloatToFloat(lastPaid)
 	p.Status = nullStringToString(status)
 	p.OwnerUsername = nullStringToString(ownerName)
+	p.WhatsAppOptIn = optInFromNumber(optIn)
 	if created.Valid {
 		p.CreatedTime = core.NewJSONTime(created.Time)
 	}
@@ -204,6 +212,9 @@ func (r *PatientRepo) Update(ctx context.Context, owner, id string, upd *core.Pa
 	if upd.Status != nil {
 		add(true, "status=:%d", *upd.Status)
 	}
+	if upd.WhatsAppOptIn != nil {
+		add(true, "whatsapp_opt_in=:%d", boolToNumber(*upd.WhatsAppOptIn))
+	}
 
 	if len(sets) == 0 {
 		// nothing to update
@@ -264,6 +275,19 @@ func nullIntToInt(ni sql.NullInt64) int {
 func nullFloatToFloat(nf sql.NullFloat64) float64 {
 	if nf.Valid {
 		return nf.Float64
+	}
+	return 0
+}
+
+// optInFromNumber maps the whatsapp_opt_in column to a bool; missing values mean opted in.
+func optInFromNumber(n sql.NullInt64) *bool {
+	optIn := !n.Valid || n.Int64 != 0
+	return &optIn
+}
+
+func boolToNumber(b bool) int {
+	if b {
+		return 1
 	}
 	return 0
 }

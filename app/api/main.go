@@ -52,6 +52,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTExpiry)
 	patientHandler := handlers.NewPatientHandler(patientRepo)
 	paymentHandler := handlers.NewPaymentHandler(paymentRepo)
+	whatsAppHandler := handlers.NewWhatsAppHandler(patientRepo, paymentRepo, cfg.WhatsAppSignature)
 
 	router := gin.Default()
 
@@ -74,6 +75,7 @@ func main() {
 	api.GET("/patients", patientHandler.List)
 	api.GET("/patients/:id", patientHandler.GetByID)
 	api.PATCH("/patients/:id", patientHandler.Update)
+	api.GET("/patients/:id/whatsapp-message", whatsAppHandler.Message)
 
 	// Payments
 	api.POST("/payments", paymentHandler.Create)

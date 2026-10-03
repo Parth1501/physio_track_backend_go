@@ -21,6 +21,8 @@ type Config struct {
 	JWTSecret       string
 	JWTIssuer       string
 	JWTExpiry       time.Duration
+	// WhatsAppSignature is appended to WhatsApp messages sent to patients (optional).
+	WhatsAppSignature string
 }
 
 // Load reads configuration from environment variables and .env (if present).
@@ -38,6 +40,8 @@ func Load() Config {
 		JWTSecret:       getEnv("JWT_SECRET", "dev-secret"),
 		JWTIssuer:       getEnv("JWT_ISSUER", "phsio-track"),
 		JWTExpiry:       getEnvDuration("JWT_EXPIRY_MIN", 60) * time.Minute,
+
+		WhatsAppSignature: getEnv("WHATSAPP_SIGNATURE", ""),
 	}
 
 	if cfg.DBUser == "" || cfg.DBPassword == "" || cfg.DBConnectString == "" || cfg.TNSAdmin == "" {

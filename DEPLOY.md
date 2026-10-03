@@ -13,6 +13,7 @@
      JWT_SECRET=change-me
      JWT_ISSUER=phsio-track
      JWT_EXPIRY_MIN=60
+     WHATSAPP_SIGNATURE="Dr. Dency"   # optional, appended to WhatsApp messages
      ```
 
 2) **Build (Ampere 1 OCPU / 1 GB)**
@@ -75,6 +76,10 @@
    - `POST /auth/login` → `{token}` (use admin creds or seeded user)
    - `POST /patients`, `GET /patients`, `GET /patients/:id`, `PATCH /patients/:id`
    - `POST /payments`, `GET /payments?patient_id=...|ALL`, `PATCH /payments/:id`, `DELETE /payments/:id`
+   - `GET /patients/:id/whatsapp-message?kind=session&payment_id=...` or `?kind=summary` → `{phone, text, url}`.
+     Builds a pre-filled WhatsApp message (session dates and counts, never amounts) for an Indian mobile number;
+     the app opens `url` (wa.me click-to-chat) so it is sent from the physiotherapist's own WhatsApp.
+     400 = no sessions / missing or invalid phone, 409 = patient opted out (`whatsapp_opt_in=false` via `PATCH /patients/:id`).
 
 8) **Android client usage**
    - Login once, cache token, send `Authorization: Bearer <token>` header.

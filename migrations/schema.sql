@@ -35,7 +35,8 @@ BEGIN
       created_time TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
       updated_time TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
       last_paid_amount NUMBER,
-      status VARCHAR2(100)
+      status VARCHAR2(100),
+      whatsapp_opt_in NUMBER(1) DEFAULT 1 NOT NULL
     )';
 EXCEPTION
   WHEN OTHERS THEN
