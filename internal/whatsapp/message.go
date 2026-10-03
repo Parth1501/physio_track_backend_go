@@ -11,39 +11,56 @@ import (
 // RecentLimit is how many session dates the per-session message lists.
 const RecentLimit = 10
 
+const fullDateLayout = "Monday, 02 January 2006"
+
+// message is the shared layout of every patient message: greeting, intro, key facts,
+// session history, outro and signature. Messages never include amounts: seeing money
+// discourages patients from continuing treatment.
+type message struct {
+	name         string
+	intro        string
+	facts        []string
+	historyTitle string
+	history      []time.Time
+	outro        string
+	signature    string
+}
+
 // SessionText builds the message sent after a session is recorded.
-// It never includes amounts: seeing money discourages patients from continuing treatment.
 func SessionText(name string, session time.Time, all []time.Time, signature string) string {
-	recent := all
-	if len(recent) > RecentLimit {
-		recent = recent[len(recent)-RecentLimit:]
+	history, title := all, "Session history:"
+	if len(history) > RecentLimit {
+		history, title = history[len(history)-RecentLimit:], "Recent sessions:"
 	}
-	var b strings.Builder
-	b.WriteString(greeting(name))
-	b.WriteString("This is to confirm that your physiotherapy session on *" + session.Format("02 Jan 2006") + "* has been completed.\n\n")
-	b.WriteString("Total sessions attended: *" + strconv.Itoa(len(all)) + "*\n")
-	if len(all) > len(recent) {
-		b.WriteString("Recent session dates:\n")
-	} else {
-		b.WriteString("Session dates:\n")
-	}
-	writeDates(&b, recent)
-	b.WriteString("\nWe look forward to seeing you at your next session.\n")
-	writeClosing(&b, signature)
-	return b.String()
+	return message{
+		name:  name,
+		intro: "This is to confirm that your physiotherapy session has been completed.",
+		facts: []string{
+			"Session date: " + bold(session.Format(fullDateLayout)),
+			"Total sessions attended: " + bold(strconv.Itoa(len(all))),
+		},
+		historyTitle: title,
+		history:      history,
+		outro:        "We look forward to seeing you at your next session.",
+		signature:    signature,
+	}.String()
 }
 
 // SummaryText builds the full session history message the physiotherapist sends on demand.
 func SummaryText(name string, all []time.Time, signature string) string {
-	var b strings.Builder
-	b.WriteString(greeting(name))
-	b.WriteString("Please find below a summary of your physiotherapy sessions.\n\n")
-	b.WriteString("Total sessions attended: *" + strconv.Itoa(len(all)) + "*\n")
-	b.WriteString("Session dates:\n")
-	writeDates(&b, all)
-	b.WriteString("\nFor any queries, please feel free to reach out.\n")
-	writeClosing(&b, signature)
-	return b.String()
+	facts := []string{"Total sessions attended: " + bold(strconv.Itoa(len(all)))}
+	if last, ok := latest(all); ok {
+		facts = append(facts, "Last session: "+bold(last.Format(fullDateLayout)))
+	}
+	return message{
+		name:         name,
+		intro:        "Please find below a summary of your physiotherapy sessions.",
+		facts:        facts,
+		historyTitle: "Session history:",
+		history:      all,
+		outro:        "For any queries, please feel free to reach out.",
+		signature:    signature,
+	}.String()
 }
 
 // ChatURL returns a click-to-chat link that opens the patient's chat with the text pre-filled.
@@ -52,27 +69,46 @@ func ChatURL(phone, text string) string {
 	return "https://wa.me/" + phone + "?text=" + strings.ReplaceAll(url.QueryEscape(text), "+", "%20")
 }
 
-func greeting(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "Dear Patient,\n\n"
+func (m message) String() string {
+	var b strings.Builder
+	if name := strings.TrimSpace(m.name); name != "" {
+		b.WriteString("Dear " + name + ",\n\n")
+	} else {
+		b.WriteString("Dear Patient,\n\n")
 	}
-	return "Dear " + name + ",\n\n"
+	b.WriteString(m.intro + "\n\n")
+	for _, f := range m.facts {
+		b.WriteString(f + "\n")
+	}
+	if lines := groupByMonth(m.history); len(lines) > 0 {
+		b.WriteString("\n" + m.historyTitle + "\n")
+		for _, line := range lines {
+			b.WriteString(line + "\n")
+		}
+	}
+	b.WriteString("\n" + m.outro + "\n\n")
+	// The signature may span several lines (name, qualifications).
+	if s := strings.TrimSpace(m.signature); s != "" {
+		b.WriteString("Warm regards,\n" + s)
+	} else {
+		b.WriteString("Thank you.")
+	}
+	return b.String()
 }
 
-func writeDates(b *strings.Builder, dates []time.Time) {
-	for _, line := range groupByMonth(dates) {
-		b.WriteString(line + "\n")
-	}
+// bold uses WhatsApp's *text* formatting.
+func bold(s string) string {
+	return "*" + s + "*"
 }
 
-// writeClosing ends the message with the signature, which may span several lines (name, qualifications).
-func writeClosing(b *strings.Builder, signature string) {
-	if s := strings.TrimSpace(signature); s != "" {
-		b.WriteString("\nWarm regards,\n" + s)
-		return
+func latest(dates []time.Time) (time.Time, bool) {
+	var last time.Time
+	for _, d := range dates {
+		if d.After(last) {
+			last = d
+		}
 	}
-	b.WriteString("\nThank you.")
+	return last, !last.IsZero()
 }
 
 // groupByMonth renders dates oldest first as one line per month, e.g. "Oct 2026: 01, 02, 03".

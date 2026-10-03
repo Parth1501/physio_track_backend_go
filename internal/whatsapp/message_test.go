@@ -31,7 +31,7 @@ func TestSessionTextCapsRecentDates(t *testing.T) {
 	}
 	text := SessionText("Rahul", all[11], all, "")
 
-	for _, want := range []string{"Dear Rahul,", "*12 Sep 2026*", "Total sessions attended: *12*", "Recent session dates:", "Sep 2026: 03, 04, 05, 06, 07, 08, 09, 10, 11, 12"} {
+	for _, want := range []string{"Dear Rahul,", "Session date: *Saturday, 12 September 2026*", "Total sessions attended: *12*", "Recent sessions:", "Sep 2026: 03, 04, 05, 06, 07, 08, 09, 10, 11, 12"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("SessionText missing %q:\n%s", want, text)
 		}
@@ -45,10 +45,10 @@ func TestSessionTextCapsRecentDates(t *testing.T) {
 }
 
 func TestSummaryTextListsAllDatesWithoutAmounts(t *testing.T) {
-	all := []time.Time{day("2026-08-30"), day("2026-09-02"), day("2026-09-05")}
+	all := []time.Time{day("2026-08-30"), day("2026-09-05"), day("2026-09-02")}
 	text := SummaryText("Rahul", all, "Dr. Dency Singwala\n(MPT, COMT, CKT)")
 
-	for _, want := range []string{"Dear Rahul,", "Total sessions attended: *3*", "Aug 2026: 30", "Sep 2026: 02, 05"} {
+	for _, want := range []string{"Dear Rahul,", "Total sessions attended: *3*", "Last session: *Saturday, 05 September 2026*", "Session history:\nAug 2026: 30\nSep 2026: 02, 05\n"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("SummaryText missing %q:\n%s", want, text)
 		}
