@@ -32,6 +32,50 @@ func (h *PaymentHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, req)
 }
 
+type bulkCreateRequest struct {
+	PatientID string          `json:"patient_id"`
+	Amount    float64         `json:"amount"`
+	Mode      string          `json:"mode"`
+	Dates     []core.JSONTime `json:"dates"`
+}
+
+const maxBulkPayments = 60
+
+// CreateBulk records one payment per date, all with the same amount and mode.
+func (h *PaymentHandler) CreateBulk(c *gin.Context) {
+	var req bulkCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
+	if req.PatientID == "" || req.Amount <= 0 || (mode != "CASH" && mode != "ONLINE" && mode != "PENDING") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "patient_id, a positive amount and mode CASH, ONLINE or PENDING are required"})
+		return
+	}
+	if len(req.Dates) == 0 || len(req.Dates) > maxBulkPayments {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "between 1 and 60 dates are required"})
+		return
+	}
+	for _, d := range req.Dates {
+		if d.IsZero() {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "every date must be set"})
+			return
+		}
+	}
+	owner := c.GetString("user")
+	items, err := h.repo.CreateBulk(c, owner, req.PatientID, req.Amount, mode, req.Dates)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err == repo.ErrForbidden {
+			status = http.StatusForbidden
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, items)
+}
+
 func (h *PaymentHandler) List(c *gin.Context) {
 	patientID := c.Query("patient_id")
 	owner := c.GetString("user")

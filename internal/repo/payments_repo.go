@@ -41,6 +41,41 @@ func (r *PaymentRepo) Create(ctx context.Context, owner string, p *core.Payment)
 	return nil
 }
 
+// CreateBulk inserts one payment per date with the same amount and mode in a single transaction.
+func (r *PaymentRepo) CreateBulk(ctx context.Context, owner, patientID string, amount float64, mode string, dates []core.JSONTime) ([]core.Payment, error) {
+	if err := r.assertPatientOwner(ctx, owner, patientID); err != nil {
+		return nil, err
+	}
+	mode = strings.ToUpper(strings.TrimSpace(mode))
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	items := make([]core.Payment, 0, len(dates))
+	for _, d := range dates {
+		p := core.Payment{ID: uuid.NewString(), PatientID: patientID, Amount: amount, Mode: mode, Date: d}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO payments (id, patient_id, amount, payment_mode, paid_date, owner_username)
+			VALUES (:1,:2,:3,:4,:5,:6)
+		`, p.ID, p.PatientID, p.Amount, p.Mode, p.Date, owner); err != nil {
+			return nil, err
+		}
+		items = append(items, p)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE patients SET last_paid_amount=:1 WHERE id=:2 AND owner_username=:3
+	`, amount, patientID, owner); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 // Upsert inserts or updates a payment keyed by id.
 func (r *PaymentRepo) Upsert(ctx context.Context, owner string, p *core.Payment) error {
 	if err := r.assertPatientOwner(ctx, owner, p.PatientID); err != nil {
