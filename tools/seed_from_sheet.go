@@ -141,8 +141,8 @@ func importDetails(ctx context.Context, repo *repo.PatientRepo, owner string, pa
 			Examination:    get(row, 10),
 			Rehab:          get(row, 11),
 			Diagnosis:      get(row, 12),
-			CreatedTime:    createdAt,
-			UpdatedTime:    updatedAt,
+			CreatedTime:    core.NewJSONTime(createdAt),
+			UpdatedTime:    core.NewJSONTime(updatedAt),
 			LastPaidAmount: atof(get(row, 15)),
 			Status:         get(row, 16),
 		}
